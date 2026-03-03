@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Picklelunch League</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Picklelunch League Manager</h1>
+
+      <section>
+        <h2>Players</h2>
+        <form id="player-form">
+          <input id="player-name" placeholder="Player name" required />
+          <button type="submit">Add Player</button>
+          <button type="button" id="clear-present-btn">Clear Present</button>
+          <button type="button" id="clear-history-btn">Clear History</button>
+          <button type="button" id="clear-players-btn">Clear Players</button>
+        </form>
+        <table id="players-table">
+          <thead>
+            <tr><th>Name</th><th>Wins</th><th>Losses</th><th>Total Points</th><th>Points Allowed</th><th>Point Diff</th><th>Pickles</th><th>Present</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Generate Round Robin</h2>
+        <form id="schedule-form">
+          <label>Date <input id="schedule-date" type="date" required /></label>
+          <label>Start Time <input id="schedule-time" type="time" value="18:00" required /></label>
+          <label>Courts <input id="court-count" type="number" value="2" min="1" required /></label>
+          <button type="submit">Generate Matches</button>
+        </form>
+        <div class="row">
+          <button type="button" id="start-session-btn">Start Round Robin</button>
+          <button type="button" id="end-session-btn">End Round Robin</button>
+          <span id="session-status"></span>
+        </div>
+      </section>
+
+      <section>
+        <h2>Active Session Stats</h2>
+        <table id="todays-stats-table">
+          <thead>
+            <tr><th>Name</th><th>Wins</th><th>Losses</th><th>Total Points</th><th>Points Allowed</th><th>Point Diff</th><th>Pickles</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section>
+        <h2>Matches</h2>
+        <div id="matches"></div>
+      </section>
+
+      <p id="message" role="status"></p>
+    </main>
+    <script src="/app.js"></script>
+  </body>
+</html>

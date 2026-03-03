@@ -1,0 +1,93 @@
+:root {
+  --bg: #f5f3e8;
+  --card: #ffffff;
+  --text: #1b2a2f;
+  --accent: #006d77;
+  --accent2: #ffb703;
+  --line: #d9d7c8;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Trebuchet MS", "Gill Sans", sans-serif;
+  background: radial-gradient(circle at top, #fff6d9, var(--bg) 55%);
+  color: var(--text);
+}
+
+main {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 0 1rem 2rem;
+}
+
+h1 {
+  margin-bottom: 1.5rem;
+  color: var(--accent);
+}
+
+section {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+form {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+input, button, select {
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid #b8c7c8;
+}
+
+button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  cursor: pointer;
+}
+
+button:hover { background: #00545b; }
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+th, td {
+  border-bottom: 1px solid var(--line);
+  text-align: left;
+  padding: 0.5rem;
+}
+
+.match {
+  border: 1px solid var(--line);
+  border-left: 6px solid var(--accent2);
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.row {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+#message {
+  min-height: 1.5rem;
+  font-weight: 600;
+}
+
+@media (max-width: 640px) {
+  form { flex-direction: column; align-items: stretch; }
+}
