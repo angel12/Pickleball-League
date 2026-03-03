@@ -7,8 +7,8 @@ const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
 const dataFile = path.join(__dirname, 'data.json');
 
-const PORT = process.env.PORT || 3131;
-const HOST = process.env.HOST || '0.0.0.0';
+const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 const CLEAR_HISTORY_PASSWORD = process.env.CLEAR_HISTORY_PASSWORD || 'Abc12345';
 
 function createEmptyState() {
@@ -26,7 +26,14 @@ function loadState() {
     fs.writeFileSync(dataFile, JSON.stringify(initial, null, 2));
     return initial;
   }
-  const state = JSON.parse(fs.readFileSync(dataFile, 'utf-8'));
+  let state;
+  try {
+    const raw = fs.readFileSync(dataFile, 'utf-8').trim();
+    state = raw ? JSON.parse(raw) : createEmptyState();
+  } catch {
+    state = createEmptyState();
+    fs.writeFileSync(dataFile, JSON.stringify(state, null, 2));
+  }
   state.players = Array.isArray(state.players) ? state.players : [];
   state.matches = Array.isArray(state.matches) ? state.matches : [];
   state.sessions = Array.isArray(state.sessions) ? state.sessions : [];
