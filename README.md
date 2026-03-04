@@ -20,6 +20,28 @@ npm start
 
 3. Open http://127.0.0.1:3000 in your browser.
 
+## Docker
+
+### Build and run with normal port mapping
+
+```bash
+APP_PORT=3000 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build
+```
+
+Then open `http://127.0.0.1:3000`.
+
+### Run with host network mode
+
+```bash
+COMPOSE_PROFILES=hostnet APP_PORT=3000 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build app-hostnet
+```
+
+Notes:
+
+- `APP_PORT` sets the app listen port inside the container.
+- In host network mode, Docker port mappings are not used.
+- Host network mode is typically supported on Linux hosts.
+
 ## Main API Endpoints
 
 - `GET /api/players`

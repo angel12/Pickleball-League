@@ -1,0 +1,26 @@
+services:
+  app:
+    build: .
+    container_name: pickleball-league
+    environment:
+      HOST: 0.0.0.0
+      PORT: ${APP_PORT:-3000}
+      CLEAR_HISTORY_PASSWORD: ${CLEAR_HISTORY_PASSWORD:-pickleball}
+    ports:
+      - "${APP_PORT:-3000}:${APP_PORT:-3000}"
+    volumes:
+      - ./data.json:/app/data.json
+    restart: unless-stopped
+
+  app-hostnet:
+    build: .
+    container_name: pickleball-league-hostnet
+    profiles: ["hostnet"]
+    network_mode: host
+    environment:
+      HOST: 0.0.0.0
+      PORT: ${APP_PORT:-3000}
+      CLEAR_HISTORY_PASSWORD: ${CLEAR_HISTORY_PASSWORD:-pickleball}
+    volumes:
+      - ./data.json:/app/data.json
+    restart: unless-stopped
