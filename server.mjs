@@ -9,7 +9,7 @@ const dataFile = path.join(__dirname, 'data.json');
 
 const PORT = process.env.PORT || 3131;
 const HOST = process.env.HOST || '0.0.0.0';
-const CLEAR_HISTORY_PASSWORD = process.env.CLEAR_HISTORY_PASSWORD || 'Abc12345';
+const CLEAR_HISTORY_PASSWORD = process.env.CLEAR_HISTORY_PASSWORD || 'pickleball';
 
 function createEmptyState() {
   return {
@@ -581,7 +581,7 @@ function apiHandler(req, res, pathname) {
         });
 
         state.matches = generated;
-        state.meta.nextMatchId = generated.length + 1;
+        state.meta.nextMatchId = generated.length ? generated.at(-1).id + 1 : 1;
         saveState(state);
         sendJson(res, 201, { generatedCount: generated.length, matches: generated });
       })

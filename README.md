@@ -18,22 +18,22 @@ A lightweight web app to manage a pickleball league:
 npm start
 ```
 
-3. Open http://127.0.0.1:3000 in your browser.
+3. Open http://127.0.0.1:3131 in your browser.
 
 ## Docker
 
 ### Build and run with normal port mapping
 
 ```bash
-APP_PORT=3000 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build
+APP_PORT=3131 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build
 ```
 
-Then open `http://127.0.0.1:3000`.
+Then open `http://127.0.0.1:3131`.
 
 ### Run with host network mode
 
 ```bash
-COMPOSE_PROFILES=hostnet APP_PORT=3000 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build app-hostnet
+COMPOSE_PROFILES=hostnet APP_PORT=3131 CLEAR_HISTORY_PASSWORD=pickleball docker compose up --build app-hostnet
 ```
 
 Notes:
