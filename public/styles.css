@@ -23,11 +23,20 @@ main {
 }
 
 h1 {
-  margin-bottom: 1.5rem;
+  margin: 0;
   color: var(--accent);
 }
 
+.app-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
 section {
+  min-width: 0;
   background: var(--card);
   border: 1px solid var(--line);
   border-radius: 12px;
@@ -63,6 +72,23 @@ table {
   border-collapse: collapse;
 }
 
+.table-scroll {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
+.table-scroll:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+#players-table { min-width: 52rem; }
+
+#todays-stats-table { min-width: 44rem; }
+
 th, td {
   border-bottom: 1px solid var(--line);
   text-align: left;
@@ -86,6 +112,32 @@ th, td {
 #message {
   min-height: 1.5rem;
   font-weight: 600;
+  color: var(--accent);
+}
+
+#message.error,
+#login-error { color: #b00020; }
+
+dialog {
+  width: min(24rem, calc(100% - 2rem));
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 1.25rem;
+}
+
+dialog::backdrop { background: rgb(27 42 47 / 55%); }
+
+#login-form {
+  display: grid;
+  align-items: stretch;
+}
+
+#login-form h2,
+#login-error { margin: 0; }
+
+#login-form label {
+  display: grid;
+  gap: 0.35rem;
 }
 
 @media (max-width: 640px) {

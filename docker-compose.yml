@@ -5,11 +5,13 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: ${APP_PORT:-3000}
-      CLEAR_HISTORY_PASSWORD: ${CLEAR_HISTORY_PASSWORD:-pickleball}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATA_DIR: /app/data
     ports:
       - "${APP_PORT:-3000}:${APP_PORT:-3000}"
     volumes:
-      - ./data.json:/app/data.json
+      - ./league-data:/app/data
     restart: unless-stopped
 
   app-hostnet:
@@ -20,7 +22,9 @@ services:
     environment:
       HOST: 0.0.0.0
       PORT: ${APP_PORT:-3000}
-      CLEAR_HISTORY_PASSWORD: ${CLEAR_HISTORY_PASSWORD:-pickleball}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      DATA_DIR: /app/data
     volumes:
-      - ./data.json:/app/data.json
+      - ./league-data:/app/data
     restart: unless-stopped

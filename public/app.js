@@ -1,3 +1,5 @@
+import { escapeHtml } from './render-utils.js';
+
 const playerForm = document.querySelector('#player-form');
 const playerNameInput = document.querySelector('#player-name');
 const clearPresentButton = document.querySelector('#clear-present-btn');
@@ -14,6 +16,11 @@ const sessionStatus = document.querySelector('#session-status');
 const matchesContainer = document.querySelector('#matches');
 const todaysStatsTableBody = document.querySelector('#todays-stats-table tbody');
 const message = document.querySelector('#message');
+const authDialog = document.querySelector('#auth-dialog');
+const loginForm = document.querySelector('#login-form');
+const loginPasswordInput = document.querySelector('#login-password');
+const loginError = document.querySelector('#login-error');
+const logoutButton = document.querySelector('#logout-btn');
 
 scheduleDateInput.value = new Date().toISOString().slice(0, 10);
 
@@ -22,21 +29,42 @@ let matches = [];
 let activeSessionStats = [];
 let activeSessionMatchesFinished = 0;
 let sessionInfo = { activeSession: null, lastSession: null };
+let csrfToken = null;
 
 function setMessage(text, isError = false) {
   message.textContent = text;
-  message.style.color = isError ? '#b00020' : '#006d77';
+  message.classList.toggle('error', isError);
 }
 
 async function api(path, options = {}) {
+  const method = String(options.method || 'GET').toUpperCase();
+  const headers = new Headers(options.headers || {});
+  if (options.body && !headers.has('Content-Type')) headers.set('Content-Type', 'application/json');
+  if (!['GET', 'HEAD'].includes(method) && path !== '/api/auth/login' && csrfToken) {
+    headers.set('X-CSRF-Token', csrfToken);
+  }
+
   const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options
+    ...options,
+    method,
+    headers,
+    credentials: 'same-origin'
   });
 
   const data = await response.json();
-  if (!response.ok) throw new Error(data.error || 'Request failed');
+  if (!response.ok) {
+    if (response.status === 401 && path !== '/api/auth/login') showLogin();
+    throw new Error(data.error || 'Request failed');
+  }
   return data;
+}
+
+function showLogin() {
+  csrfToken = null;
+  loginPasswordInput.value = '';
+  loginError.textContent = '';
+  if (!authDialog.open) authDialog.showModal();
+  loginPasswordInput.focus();
 }
 
 function playerNameById(id) {
@@ -57,7 +85,7 @@ function renderPlayers() {
         const pointsAllowed = Number.isFinite(p.pointsAllowed) ? p.pointsAllowed : 0;
         const pointDiff = totalPoints - pointsAllowed;
         return `<tr>
-        <td>${p.name}</td>
+        <td>${escapeHtml(p.name)}</td>
         <td>${p.wins}</td>
         <td>${p.losses}</td>
         <td>${totalPoints}</td>
@@ -93,7 +121,7 @@ function renderActiveSessionStats() {
     .sort((a, b) => b.wins - a.wins || b.pointDiff - a.pointDiff || b.totalPoints - a.totalPoints || a.losses - b.losses || a.name.localeCompare(b.name))
     .map(
       stat => `<tr>
-        <td>${stat.name}</td>
+        <td>${escapeHtml(stat.name)}</td>
         <td>${stat.wins}</td>
         <td>${stat.losses}</td>
         <td>${stat.totalPoints}</td>
@@ -139,15 +167,16 @@ function renderMatches() {
         Number.isInteger(match.team1Score) && Number.isInteger(match.team2Score)
           ? `${match.team1Score} - ${match.team2Score}`
           : 'Not recorded';
+      const winnerLabel = escapeHtml(winner);
 
       return `
         <article class="match">
-          <strong>Round ${match.round}</strong> - ${match.scheduledAt} - ${courtLabel}<br />
-          Team 1: ${team1}<br />
-          Team 2: ${team2}<br />
+          <strong>Round ${escapeHtml(match.round)}</strong> - ${escapeHtml(match.scheduledAt)} - ${escapeHtml(courtLabel)}<br />
+          Team 1: ${escapeHtml(team1)}<br />
+          Team 2: ${escapeHtml(team2)}<br />
           Score: ${scoreLabel}<br />
-          Sitting out this round: ${sitOutLabel}<br />
-          Winner: ${winner}<br />
+          Sitting out this round: ${escapeHtml(sitOutLabel)}<br />
+          Winner: ${winnerLabel}<br />
           <div class="row">
             <input data-match-id="${match.id}" data-type="team1-score" type="number" min="0" step="1" placeholder="Team 1 score" value="${Number.isInteger(match.team1Score) ? match.team1Score : ''}" />
             <input data-match-id="${match.id}" data-type="team2-score" type="number" min="0" step="1" placeholder="Team 2 score" value="${Number.isInteger(match.team2Score) ? match.team2Score : ''}" />
@@ -218,14 +247,9 @@ clearPresentButton.addEventListener('click', async () => {
 clearHistoryButton.addEventListener('click', async () => {
   const confirmed = window.confirm('Clear all player stats and current matches, but keep player names?');
   if (!confirmed) return;
-  const password = window.prompt('Enter password to clear history:');
-  if (password === null) return;
 
   try {
-    await api('/api/players/clear-history', {
-      method: 'POST',
-      body: JSON.stringify({ password })
-    });
+    await api('/api/players/clear-history', { method: 'POST' });
     await refresh();
     setMessage('Player history cleared. Names kept.');
   } catch (error) {
@@ -315,4 +339,47 @@ matchesContainer.addEventListener('click', async event => {
   }
 });
 
-refresh().catch(error => setMessage(error.message, true));
+loginForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  loginError.textContent = '';
+
+  try {
+    const result = await api('/api/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ password: loginPasswordInput.value })
+    });
+    csrfToken = result.csrfToken;
+    authDialog.close();
+    await refresh();
+    setMessage('Signed in.');
+  } catch (error) {
+    loginError.textContent = error.message;
+    loginPasswordInput.select();
+  }
+});
+
+authDialog.addEventListener('cancel', event => event.preventDefault());
+
+logoutButton.addEventListener('click', async () => {
+  try {
+    await api('/api/auth/logout', { method: 'POST' });
+  } finally {
+    showLogin();
+  }
+});
+
+async function initialize() {
+  const auth = await api('/api/auth/session');
+  if (!auth.authenticated) {
+    showLogin();
+    return;
+  }
+
+  csrfToken = auth.csrfToken;
+  await refresh();
+}
+
+initialize().catch(error => {
+  setMessage(error.message, true);
+  showLogin();
+});

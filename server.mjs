@@ -1,15 +1,24 @@
 import http from 'node:http';
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import url from 'node:url';
 
 const __dirname = path.dirname(url.fileURLToPath(import.meta.url));
 const publicDir = path.join(__dirname, 'public');
-const dataFile = path.join(__dirname, 'data.json');
+const dataDir = process.env.DATA_DIR ? path.resolve(process.env.DATA_DIR) : __dirname;
+const dataFile = path.join(dataDir, 'data.json');
 
 const PORT = process.env.PORT || 3131;
 const HOST = process.env.HOST || '0.0.0.0';
-const CLEAR_HISTORY_PASSWORD = process.env.CLEAR_HISTORY_PASSWORD || 'pickleball';
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const sessions = new Map();
+let mutationQueue = Promise.resolve();
+
+if (!ADMIN_PASSWORD) {
+  throw new Error('ADMIN_PASSWORD must be set');
+}
 
 function createEmptyState() {
   return {
@@ -23,16 +32,15 @@ function createEmptyState() {
 function loadState() {
   if (!fs.existsSync(dataFile)) {
     const initial = createEmptyState();
-    fs.writeFileSync(dataFile, JSON.stringify(initial, null, 2));
+    saveState(initial);
     return initial;
   }
   let state;
   try {
     const raw = fs.readFileSync(dataFile, 'utf-8').trim();
     state = raw ? JSON.parse(raw) : createEmptyState();
-  } catch {
-    state = createEmptyState();
-    fs.writeFileSync(dataFile, JSON.stringify(state, null, 2));
+  } catch (error) {
+    throw new Error(`Unable to parse ${dataFile}; refusing to overwrite it`, { cause: error });
   }
   state.players = Array.isArray(state.players) ? state.players : [];
   state.matches = Array.isArray(state.matches) ? state.matches : [];
@@ -54,11 +62,35 @@ function loadState() {
 }
 
 function saveState(state) {
-  fs.writeFileSync(dataFile, JSON.stringify(state, null, 2));
+  fs.mkdirSync(dataDir, { recursive: true });
+  const tempFile = path.join(dataDir, `.data.${process.pid}.${crypto.randomUUID()}.tmp`);
+  const contents = JSON.stringify(state, null, 2);
+  let fd;
+
+  try {
+    fd = fs.openSync(tempFile, 'wx', 0o600);
+    fs.writeFileSync(fd, contents);
+    fs.fsyncSync(fd);
+    fs.closeSync(fd);
+    fd = undefined;
+    fs.renameSync(tempFile, dataFile);
+  } catch (error) {
+    if (fd !== undefined) fs.closeSync(fd);
+    try {
+      fs.unlinkSync(tempFile);
+    } catch {
+      // The temporary file may not have been created.
+    }
+    throw error;
+  }
 }
 
 function sendJson(res, status, payload) {
-  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.writeHead(status, {
+    'Content-Type': 'application/json',
+    'Cache-Control': 'no-store',
+    'X-Content-Type-Options': 'nosniff'
+  });
   res.end(JSON.stringify(payload));
 }
 
@@ -76,12 +108,19 @@ function sendFile(res, filePath) {
       '.js': 'application/javascript'
     };
 
-    res.writeHead(200, { 'Content-Type': contentTypes[ext] || 'text/plain' });
+    res.writeHead(200, {
+      'Content-Type': contentTypes[ext] || 'text/plain',
+      'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'",
+      'Referrer-Policy': 'no-referrer',
+      'X-Content-Type-Options': 'nosniff'
+    });
     res.end(content);
   });
 }
 
 function parseBody(req) {
+  if (req.parsedBody !== undefined) return Promise.resolve(req.parsedBody);
+
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', chunk => {
@@ -101,6 +140,83 @@ function parseBody(req) {
         reject(new Error('Invalid JSON body'));
       }
     });
+  });
+}
+
+function parseCookies(req) {
+  return String(req.headers.cookie || '')
+    .split(';')
+    .map(item => item.trim().split('='))
+    .reduce((cookies, [name, ...valueParts]) => {
+      if (name) cookies[name] = valueParts.join('=');
+      return cookies;
+    }, {});
+}
+
+function getSession(req) {
+  const token = parseCookies(req).pickleball_session;
+  if (!token) return null;
+  const session = sessions.get(token);
+  if (!session) return null;
+  if (session.expiresAt <= Date.now()) {
+    sessions.delete(token);
+    return null;
+  }
+  return { token, ...session };
+}
+
+function secretsMatch(candidate, expected) {
+  const candidateBuffer = Buffer.from(String(candidate));
+  const expectedBuffer = Buffer.from(String(expected));
+  return candidateBuffer.length === expectedBuffer.length && crypto.timingSafeEqual(candidateBuffer, expectedBuffer);
+}
+
+function setSessionCookie(res, token, maxAge) {
+  const secure = process.env.COOKIE_SECURE === 'true' ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `pickleball_session=${token}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${maxAge}${secure}`);
+}
+
+function authorizeMutation(req, res) {
+  const session = getSession(req);
+  if (!session) {
+    sendJson(res, 401, { error: 'Authentication required' });
+    return false;
+  }
+
+  if (!secretsMatch(req.headers['x-csrf-token'] || '', session.csrfToken)) {
+    sendJson(res, 403, { error: 'Invalid CSRF token' });
+    return false;
+  }
+
+  req.authSession = session;
+  return true;
+}
+
+function enqueueMutation(task) {
+  const operation = mutationQueue.then(task, task);
+  mutationQueue = operation.catch(() => {});
+  return operation;
+}
+
+function runApiHandler(req, res, pathname) {
+  return new Promise(resolve => {
+    let resolved = false;
+    const finish = () => {
+      if (resolved) return;
+      resolved = true;
+      resolve();
+    };
+
+    res.once('finish', finish);
+    res.once('close', finish);
+    try {
+      apiHandler(req, res, pathname);
+    } catch (error) {
+      console.error(error);
+      if (!res.headersSent) sendJson(res, 500, { error: 'Internal server error' });
+      else res.destroy();
+      finish();
+    }
   });
 }
 
@@ -336,6 +452,39 @@ function getMatchParticipantIds(match) {
 }
 
 function apiHandler(req, res, pathname) {
+  if (req.method === 'GET' && pathname === '/api/auth/session') {
+    const session = getSession(req);
+    sendJson(res, 200, session
+      ? { authenticated: true, csrfToken: session.csrfToken }
+      : { authenticated: false, csrfToken: null });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/auth/login') {
+    parseBody(req)
+      .then(body => {
+        if (!secretsMatch(body.password || '', ADMIN_PASSWORD)) {
+          sendJson(res, 401, { error: 'Invalid password' });
+          return;
+        }
+
+        const token = crypto.randomBytes(32).toString('base64url');
+        const csrfToken = crypto.randomBytes(32).toString('base64url');
+        sessions.set(token, { csrfToken, expiresAt: Date.now() + SESSION_TTL_MS });
+        setSessionCookie(res, token, Math.floor(SESSION_TTL_MS / 1000));
+        sendJson(res, 200, { authenticated: true, csrfToken });
+      })
+      .catch(err => sendJson(res, 400, { error: err.message }));
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/auth/logout') {
+    if (req.authSession) sessions.delete(req.authSession.token);
+    setSessionCookie(res, '', 0);
+    sendJson(res, 200, { success: true });
+    return;
+  }
+
   const state = loadState();
 
   if (req.method === 'GET' && pathname === '/api/players') {
@@ -349,6 +498,11 @@ function apiHandler(req, res, pathname) {
         const name = String(body.name || '').trim();
         if (!name) {
           sendJson(res, 400, { error: 'Player name is required' });
+          return;
+        }
+
+        if (name.length > 80) {
+          sendJson(res, 400, { error: 'Player name must be 80 characters or fewer' });
           return;
         }
 
@@ -381,13 +535,7 @@ function apiHandler(req, res, pathname) {
 
   if (req.method === 'POST' && pathname === '/api/players/clear-history') {
     parseBody(req)
-      .then(body => {
-        const password = String(body.password || '');
-        if (password !== CLEAR_HISTORY_PASSWORD) {
-          sendJson(res, 403, { error: 'Invalid password for clear history' });
-          return;
-        }
-
+      .then(() => {
         state.players.forEach(player => {
           player.wins = 0;
           player.losses = 0;
@@ -678,11 +826,27 @@ function apiHandler(req, res, pathname) {
 }
 
 const server = http.createServer((req, res) => {
-  const parsed = new URL(req.url, `http://${req.headers.host}`);
-  const pathname = parsed.pathname;
+  let pathname;
+  try {
+    pathname = new URL(req.url, `http://${req.headers.host || 'localhost'}`).pathname;
+  } catch {
+    sendJson(res, 400, { error: 'Invalid request URL' });
+    return;
+  }
 
   if (pathname.startsWith('/api/')) {
-    apiHandler(req, res, pathname);
+    if (req.method === 'POST' && pathname !== '/api/auth/login') {
+      if (!authorizeMutation(req, res)) return;
+      parseBody(req)
+        .then(body => {
+          req.parsedBody = body;
+          enqueueMutation(() => runApiHandler(req, res, pathname));
+        })
+        .catch(err => sendJson(res, 400, { error: err.message }));
+      return;
+    }
+
+    runApiHandler(req, res, pathname);
     return;
   }
 

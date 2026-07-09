@@ -5,11 +5,13 @@ WORKDIR /app
 COPY package.json ./
 COPY server.mjs ./
 COPY public ./public
-COPY data.json ./data.json
+RUN mkdir -p /app/data
+COPY data.json ./data/data.json
 
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
+ENV DATA_DIR=/app/data
 
 EXPOSE 3000
 
