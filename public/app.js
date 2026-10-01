@@ -319,8 +319,12 @@ matchesContainer.addEventListener('click', async event => {
   const matchId = button.dataset.matchId;
   const team1Input = matchesContainer.querySelector(`input[data-match-id="${matchId}"][data-type="team1-score"]`);
   const team2Input = matchesContainer.querySelector(`input[data-match-id="${matchId}"][data-type="team2-score"]`);
-  const team1Score = Number(team1Input?.value);
-  const team2Score = Number(team2Input?.value);
+  if (!team1Input.value.trim() || !team2Input.value.trim()) {
+    setMessage('Enter a score for both teams before saving.', true);
+    return;
+  }
+  const team1Score = Number(team1Input.value);
+  const team2Score = Number(team2Input.value);
 
   if (!Number.isInteger(team1Score) || !Number.isInteger(team2Score) || team1Score < 0 || team2Score < 0) {
     setMessage('Enter non-negative whole-number scores for both teams.', true);
