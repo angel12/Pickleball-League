@@ -94,6 +94,22 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload));
 }
 
+// For requests abandoned mid-upload (e.g. oversized bodies): flush the
+// response, then close the connection so the kernel buffer drains and
+// keep-alive slots are not held by a stalled stream.
+function rejectRequest(res, status, message) {
+  if (!res.headersSent) {
+    res.writeHead(status, {
+      'Content-Type': 'application/json',
+      'Cache-Control': 'no-store',
+      'X-Content-Type-Options': 'nosniff',
+      'Connection': 'close'
+    });
+  }
+  res.end(JSON.stringify({ error: message }));
+  res.on('finish', () => res.destroy());
+}
+
 function sendFile(res, filePath) {
   fs.readFile(filePath, (err, content) => {
     if (err) {
@@ -123,9 +139,15 @@ function parseBody(req) {
 
   return new Promise((resolve, reject) => {
     let data = '';
+    let aborted = false;
     req.on('data', chunk => {
+      if (aborted) return;
       data += chunk;
       if (data.length > 1e6) {
+        // Stop accumulating and stop reading so a client cannot grow memory
+        // without bound; the kernel buffer then applies backpressure.
+        aborted = true;
+        req.pause();
         reject(new Error('Payload too large'));
       }
     });
@@ -474,7 +496,7 @@ function apiHandler(req, res, pathname) {
         setSessionCookie(res, token, Math.floor(SESSION_TTL_MS / 1000));
         sendJson(res, 200, { authenticated: true, csrfToken });
       })
-      .catch(err => sendJson(res, 400, { error: err.message }));
+      .catch(err => rejectRequest(res, 400, err.message));
     return;
   }
 
@@ -842,7 +864,7 @@ const server = http.createServer((req, res) => {
           req.parsedBody = body;
           enqueueMutation(() => runApiHandler(req, res, pathname));
         })
-        .catch(err => sendJson(res, 400, { error: err.message }));
+        .catch(err => rejectRequest(res, 400, err.message));
       return;
     }
 
