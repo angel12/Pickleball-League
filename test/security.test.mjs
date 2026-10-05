@@ -104,6 +104,22 @@ test('static responses include a restrictive content security policy', async () 
   assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'none'/);
 });
 
+test('oversized request bodies are rejected and stop being read', async () => {
+  const oversized = 'x'.repeat(1.5e6);
+  const response = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ password: oversized })
+  });
+  assert.equal(response.status, 400);
+  const result = await response.json();
+  assert.equal(result.error, 'Payload too large');
+
+  // The server must remain healthy after the rejected upload.
+  const followUp = await fetch(`${baseUrl}/api/players`);
+  assert.equal(followUp.status, 200);
+});
+
 test('overlapping slow mutations do not lose updates', async () => {
   const count = 10;
   const requests = await Promise.all(Array.from({ length: count }, (_, index) => new Promise((resolve, reject) => {
